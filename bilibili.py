@@ -61,7 +61,7 @@ def getVideoInfo(bvid) -> dict:
     except:
         print("获取视频信息失败.")
 
-def getRank(save=1):
+def getRank(save=1, saving_type=0):
     rankings = {
     '全站' : 'https://www.bilibili.com/ranking/all/0/0/3',
     '动画' : 'https://www.bilibili.com/ranking/all/1/0/3',
@@ -78,7 +78,7 @@ def getRank(save=1):
     '娱乐' : 'https://www.bilibili.com/ranking/all/5/0/3',
     '影视' : 'https://www.bilibili.com/ranking/all/181/0/3'
     }
-
+    overallRanking = {}
     #分别获取各个榜单详情
     for ranking in rankings:
         try:
@@ -100,14 +100,22 @@ def getRank(save=1):
                     'overall_score' : overall_score
                 }
                 ranklistToSave.append(video)
+            overallRanking[ranking] = ranklistToSave
             #持久化存储
             if not os.path.exists(f'./{datenow}'):
                 os.makedirs(f'./{datenow}')
-            with open(f'./{datenow}/{ranking}.json','w',encoding='utf-8') as f:
-                json.dump(ranklistToSave,fp=f,ensure_ascii=False)
+            if saving_type == 0:
+                with open(f'./{datenow}/#总榜.json','w',encoding='utf-8') as f:
+                    json.dump(overallRanking,fp=f,ensure_ascii=False)
+            elif saving_type == 1:    
+                with open(f'./{datenow}/{ranking}.json','w',encoding='utf-8') as f:
+                    json.dump(ranklistToSave,fp=f,ensure_ascii=False)
+            
             print(f'{ranking}榜 保存成功')
         except:
             print('获取榜单失败')
+        
+        
 
 getRank()
     # for content in ranklist:
