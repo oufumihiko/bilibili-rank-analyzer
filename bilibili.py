@@ -1,10 +1,7 @@
-import requests
+import requests, json, os, datetime, math
 from lxml import etree
-import json
 from bvtest import dec
-import os
-import datetime
-import math
+import time
 
 datenow = datetime.datetime.today().strftime('%Y-%m-%d') 
 headers = {
@@ -16,8 +13,44 @@ proxies = {
     'https': 'https://' + proxy
 }
 
+class Bvideo:
+    headers = {
+    'User-Agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.135 Safari/537.36'
+    }
 
-def getAllMemberVideo(mid,save="n") -> list:
+    def __init__(self, bvid):
+        self.bvid = bvid
+        self.blink = f'https://www.bilibili.com/video/{self.bvid}'
+    
+    def getAid(self):
+        self.aid = str(dec(self.bvid))
+
+
+    def get_video_page(self):
+        video_page = requests.get(url=self.blink,headers=headers)
+        return video_page
+    
+    def getTags(self) -> list: #获取 Tag
+        self.getAid()
+        self.taglink = f'https://api.bilibili.com/x/web-interface/view/detail/tag?aid={self.aid}'
+
+        tags = requests.get(url=self.taglink).json()['data']
+        tagNames = []
+        try:
+            for tag in tags:
+                tagNames.append(tag['tag_name'])
+            return tagNames
+        except:
+            print("获取 Tag 失败.")
+
+    def getThumbnailUrl(bvid): #获取视频封面地址
+        page = requests.get(url=f'https://www.bilibili.com/video/{bvid}',headers=headers).text
+        tree = etree.HTML(page)
+        url = tree.xpath('//meta[@itemprop="thumbnailUrl"]/@content')[0]
+        print(url)
+
+
+def getAllMemberVideo(mid,save="n") -> list: #获取用户视频空间所有视频
     url = f'https://api.bilibili.com/x/space/arc/search?mid={mid}'
     #获取用户空间视频页数
     videoCount = requests.get(url=url,headers=headers).json()['data']['page']['count']
@@ -25,26 +58,14 @@ def getAllMemberVideo(mid,save="n") -> list:
     videoList = []
     for page in range(1,pageSize+1):
         url = f'https://api.bilibili.com/x/space/arc/search?mid={mid}&pn={page}'
-        # print(url)
         page_n = requests.get(url=url,headers=headers).json()['data']['list']['vlist']
-        videoList.append(page_n)
+        videoList.extend(page_n)
     if save == "y":
         with open(f'./{mid}.json','w',encoding='utf-8') as f:
             json.dump(videoList,fp=f,ensure_ascii=False)
     return videoList
 
-def getTags(aid) -> list: #获取 Tag
-    url = f'https://api.bilibili.com/x/web-interface/view/detail/tag?aid={aid}'
-    tags = requests.get(url=url).json()['data']
-    tagNames = []
-    try:
-        for tag in tags:
-            tagNames.append(tag['tag_name'])
-        return tagNames
-    except:
-        print("获取 Tag 失败.")
-
-def getVideoInfo(bvid) -> dict:
+def getVideoInfo(bvid) -> dict: #获取单个视频播放、点赞、弹幕、回复、收藏、投币、分享数据
     aid = str(dec(bvid)) #转换 bv 至 av
     try: 
         urljson = f'https://api.bilibili.com/x/web-interface/archive/stat?aid={aid}'
@@ -61,7 +82,7 @@ def getVideoInfo(bvid) -> dict:
     except:
         print("获取视频信息失败.")
 
-def getRank(save=1, saving_type=0):
+def getRank(save_to_file:bool = True, save_as_seperate_score:bool = False): 
     rankings = {
     '全站' : 'https://www.bilibili.com/ranking/all/0/0/3',
     '动画' : 'https://www.bilibili.com/ranking/all/1/0/3',
@@ -86,64 +107,68 @@ def getRank(save=1, saving_type=0):
             url = rankings[ranking]
             response = requests.get(url=url,headers=headers).text
             tree = etree.HTML(response)
-            ranklist = tree.xpath("//*[@id='app']/div[1]/div/div[1]/div[2]/div[3]/ul/li") 
+            ranklist = tree.xpath("//*[@id='app']/div[1]/div/div[1]/div[2]/div[3]/ul/li")  #榜单中的所有list
             ranklistToSave = []
             for list in ranklist:
-                num = list.xpath("./div[1]/text()")[0]
+                rank = list.xpath("./div[1]/text()")[0]
                 title = list.xpath('./div[2]/div[2]/a/text()')[0]
                 bvid = list.xpath('./div[2]/div[1]/a/@href')[0].lstrip('https://www.bilibili.com/video/')
                 overall_score = list.xpath('./div[2]/div[2]/div[2]/div/text()')[0]
                 video = {
                     'bvid' : bvid,
-                    'num' : num,
+                    'rank' : rank,
                     'title' : title,
-                    'overall_score' : overall_score
+                    'overall_score' : overall_score,
+                    'tags' : ''
                 }
                 ranklistToSave.append(video)
             overallRanking[ranking] = ranklistToSave
-            #持久化存储
-            if not os.path.exists(f'./{datenow}'):
-                os.makedirs(f'./{datenow}')
-            if saving_type == 0:
-                with open(f'./{datenow}/#总榜.json','w',encoding='utf-8') as f:
-                    json.dump(overallRanking,fp=f,ensure_ascii=False)
-            elif saving_type == 1:    
+            if save_to_file == True and save_as_seperate_score == True:
+                #持久化存储
+                if not os.path.exists(f'./{datenow}'):
+                    os.makedirs(f'./{datenow}')  
                 with open(f'./{datenow}/{ranking}.json','w',encoding='utf-8') as f:
                     json.dump(ranklistToSave,fp=f,ensure_ascii=False)
-            
-            print(f'{ranking}榜 保存成功')
+                    print(f'{ranking}榜 保存成功')
         except:
             print('获取榜单失败')
-        
-        
 
-getRank()
-    # for content in ranklist:
-    #     num = content.xpath("./div[1]/text()")[0]
-    #     title = content.xpath('./div[2]/div[2]/a/text()')[0]
-    #     bvid = content.xpath('./div[2]/div[1]/a/@href')[0].lstrip('https://www.bilibili.com/video/')
-    #     author = content.xpath('./div[2]/div[2]/div/a//text()')[0]
-    #     overall_score = content.xpath('./div[2]/div[2]/div[2]/div/text()')[0]
-    #     print(num,title,author)
-    #     video = {
-    #         'title' : title,
-    #         'author' : author,
-    #         'bvid' : bvid,
-    #         'overall_score' : overall_score
-    #     }
-    #     rank = {
-    #         'num' : num,
-    #         'ranking' : ranking
-    #     }
-    #     video['ranking'] = []
-    #     video['ranking'].append(rank)
-    #     video_list.append(video)
+    if save_to_file == True:
+        with open(f'./{datenow}/#总榜.json','w',encoding='utf-8') as fp:
+            json.dump(overallRanking,fp=fp,ensure_ascii=False)
+    return overallRanking
+    
 
-    #     # video_info = getVideoInfo(bvid)
+# mid = 93415
+# getAllMemberVideo(mid,'y')
+# with open(f'./{mid}.json','r',encoding='utf-8') as f:
+#     vlist = json.load(fp=f)
+#     count = len(vlist)
+#     print(f'共{len(vlist)}个封面待下载')
+#     i = 1
+#     for v in vlist:
+#         bvid = v['bvid']
+#         link = 'http:' + v['pic']
+#         ftype = v['pic'].split('.')[-1]
+#         pic = requests.get(url = link).content
+#         print(f'正在下载第{i}个封面，剩余{count-i}个')
+#         if not os.path.exists(f'./{mid}'):
+#                 os.makedirs(f'./{mid}')
+#         with open(f'./{mid}/{bvid}.{ftype}','wb') as img:
+#             img.write(pic)
+#         i += 1
 
-    #     # video = dict( video_info, **video )
-    #     # video['tags'] = getTags(video['aid'])
-    #     # time.sleep(5)
-# with open('./ranking.json','w',encoding='utf-8') as f:
-#     json.dump(video_list,fp=f,ensure_ascii=False)
+
+if __name__ == "__main__":
+    rank_list = getRank(save_to_file=True,save_as_seperate_score=True)
+    for rank in rank_list:
+        for video in rank_list[rank]:
+            target_video = Bvideo(video['bvid'])
+            try:
+                video['tags'] = target_video.getTags()
+            except:
+                print(f"获取{video['bvid']} 标签失败！")
+            print(video['title'],video['bvid'],video['tags'])
+            time.sleep(1)
+
 
